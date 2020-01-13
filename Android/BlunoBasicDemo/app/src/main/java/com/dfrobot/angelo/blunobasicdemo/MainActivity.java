@@ -1,9 +1,11 @@
 package com.dfrobot.angelo.blunobasicdemo;
 
 import android.Manifest;
+import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.Context;
 import android.content.pm.PackageManager;
+import android.os.AsyncTask;
 import android.os.Bundle;
 import android.content.Intent;
 import android.support.v4.app.ActivityCompat;
@@ -16,17 +18,31 @@ import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import java.lang.ref.WeakReference;
+import java.sql.Timestamp;
+import java.util.Date;
+
+// TODO: proper frequence (once every minute??)
+// TODO: keep connection when App is closed
+// TODO: send to remote database
+
 public class MainActivity  extends BlunoLibrary {
 	private Button buttonScan;
 	private Button buttonSerialSend;
 	private EditText serialSendText;
 	private TextView serialReceivedText;
-	
+	//private AppDatabase db;
+
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
 		super.onCreate(savedInstanceState);
 		setContentView(R.layout.activity_main);
         onCreateProcess();														//onCreate Process by BlunoLibrary
+
+		//TODO: dont recreate db with every app start
+		// create database
+		//db = Room.databaseBuilder(getApplicationContext(),
+		//		AppDatabase.class, "temperature-db").build();
 
 
 		requestPermissions(new String[]{Manifest.permission.ACCESS_COARSE_LOCATION, Manifest.permission.ACCESS_FINE_LOCATION}, 1);
@@ -77,8 +93,8 @@ public class MainActivity  extends BlunoLibrary {
 		System.out.println("BlUNOActivity onResume");
 		onResumeProcess();														//onResume Process by BlunoLibrary
 	}
-	
-	
+
+
 	
 	@Override
 	protected void onActivityResult(int requestCode, int resultCode, Intent data) {
@@ -89,12 +105,12 @@ public class MainActivity  extends BlunoLibrary {
     @Override
     protected void onPause() {
         super.onPause();
-        onPauseProcess();														//onPause Process by BlunoLibrary
+        //onPauseProcess();														//onPause Process by BlunoLibrary
     }
 	
 	protected void onStop() {
 		super.onStop();
-		onStopProcess();														//onStop Process by BlunoLibrary
+		//onStopProcess();														//onStop Process by BlunoLibrary
 	}
     
 	@Override
@@ -127,11 +143,42 @@ public class MainActivity  extends BlunoLibrary {
 	}
 
 	@Override
-	public void onSerialReceived(String theString) {							//Once connection data received, this function will be called
-		// TODO Auto-generated method stub
-		serialReceivedText.append(theString);							//append the text into the EditText
+	public void onSerialReceived(String theString) {//Once connection data received, this function will be called
+		double tempValue = Float.parseFloat(theString);
+		serialReceivedText.append(theString);//append the text into the EditText
+        serialReceivedText.append("\n");
+
+		//TODO: save data to DB (change to float)
+		long time = System.currentTimeMillis();
+		Temperature newTemperature = new Temperature(time, tempValue);
+
+		new AgentAsyncTask(this,newTemperature).execute();
+
+
 		//The Serial data from the BLUNO may be sub-packaged, so using a buffer to hold the String is a good choice.
 		((ScrollView)serialReceivedText.getParent()).fullScroll(View.FOCUS_DOWN);
+	}
+
+
+
+	private static class AgentAsyncTask extends AsyncTask<Void, Void, Integer> {
+
+		//Prevent leak
+		private WeakReference<Activity> weakActivity;
+		private Temperature temperature;
+
+		public AgentAsyncTask(Activity activity, Temperature temperature){
+			weakActivity = new WeakReference<>(activity);
+			this.temperature = temperature;
+		}
+
+		@Override
+		protected Integer doInBackground(Void... params) {
+			TemperatureDao temperatureDao = MyApp.DatabaseSetup.getDatabase().temperatureDao();
+			temperatureDao.insertTemperature(temperature);
+			//TODO proper return
+			return null;
+		}
 	}
 
 }
